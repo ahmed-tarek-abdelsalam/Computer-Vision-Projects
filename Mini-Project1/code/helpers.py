@@ -4,8 +4,10 @@
 # CS 4495/6476 @ Georgia Tech
 import numpy as np
 from numpy import pi, exp, sqrt
+import copy
 from skimage import io, img_as_ubyte, img_as_float32
 from skimage.transform import rescale
+from scipy.signal import convolve2d, correlate2d
 
 def my_imfilter(image: np.ndarray, filter: np.ndarray):
   """
@@ -43,35 +45,28 @@ def gen_hybrid_image(image1: np.ndarray, image2: np.ndarray, cutoff_frequency: f
 
   assert image1.shape == image2.shape
 
-  # Steps:
-  # (1) Remove the high frequencies from image1 by blurring it. The amount of
-  #     blur that works best will vary with different image pairs
-  # generate a gaussian kernel with mean=0 and sigma = cutoff_frequency,
-  # Just a heads up but think how you can generate 2D gaussian kernel from 1D gaussian kernel
-  kernel = None
+  # Making the low pass filter image by
+   
+  kernel = create_gaussian_filter((cutoff_frequency*2)+1,cutoff_frequency)
   
-  # Your code here:
-  low_frequencies = None # Replace with your implementation
+ 
+  low_frequencies = my_imfilter(image1,kernel) #
 
-  # (2) Remove the low frequencies from image2. The easiest way to do this is to
-  #     subtract a blurred version of image2 from the original version of image2.
-  #     This will give you an image centered at zero with negative values.
-  # Your code here #
-  high_frequencies = None # Replace with your implementation
+  # Making the high pass filter image by creating a low pass filter version the substracting the original image from the low pass filter version
 
-  # (3) Combine the high frequencies and low frequencies
-  # Your code here #
-  hybrid_image = None # Replace with your implementation
+  image2_blurred = my_imfilter(image2,kernel) 
 
-  # (4) At this point, you need to be aware that values larger than 1.0
-  # or less than 0.0 may cause issues in the functions in Python for saving
-  # images to disk. These are called in proj1_part2 after the call to 
-  # gen_hybrid_image().
-  # One option is to clip (also called clamp) all values below 0.0 to 0.0, 
-  # and all values larger than 1.0 to 1.0.
-  # (5) As a good software development practice you may add some checks (assertions) for the shapes
-  # and ranges of your results. This can be performed as test for the code during development or even
-  # at production!
+  high_frequencies = image2 - image2_blurred  
+
+  # Making the hybrid images by combining the low pass filter and high pass filter images
+  
+  hybrid_image = high_frequencies + low_frequencies 
+
+
+  # Clipping values above 1 to 1 and values under zero to zero
+  low_frequencies = np.clip(low_frequencies, a_min = 0, a_max = 1)
+  high_frequencies = np.clip(high_frequencies, a_min = 0, a_max = 1)
+  hybrid_image = np.clip(hybrid_image, a_min = 0, a_max = 1)
 
   return low_frequencies, high_frequencies, hybrid_image
 
