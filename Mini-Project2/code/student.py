@@ -1,5 +1,14 @@
 import numpy as np
-
+from audioop import reverse
+from cmath import pi
+from re import A
+from typing import List
+from unittest.mock import patch
+import numpy as np
+from copy import deepcopy
+from scipy.signal import convolve2d, correlate2d
+import cv2
+from skimage.filters import scharr_h, scharr_v, sobel_h, sobel_v, gaussian
 
 def get_interest_points(image, feature_width):
     """
@@ -41,14 +50,64 @@ def get_interest_points(image, feature_width):
     :orientation: an np array indicating the orientation of each interest point
 
     """
+    threshold = 0.05
+    
+    rows , cols = image.shape
+    
+    xs = []
+    
+    ys = []
+    
+    rs= []
+    
+    image = cv2.GaussianBlur(image,ksize=(3,3),sigmaX=8,sigmaY=8,
+    borderType=cv2.BORDER_CONSTANT)
+    # get the gradients in the x and y directions using sobel filter
 
-    # TODO: Your implementation here! See block comments and the project webpage for instructions
+    I_x = cv2.Sobel(image, cv2.CV_32F, 1, 0)
+    I_y = cv2.Sobel(image, cv2.CV_32F, 0, 1)
+    
 
-    # These are placeholders - replace with the coordinates of your interest points!
-    xs = np.zeros(1)
-    ys = np.zeros(1)
+    Ixx = I_x**2
+    Ixy = I_y*I_x
+    Iyy = I_y**2
 
-    return xs, ys
+    # find the sum squared difference (SSD)
+    for y in range(feature_width,rows-feature_width,2):
+        for x in range(feature_width,cols-feature_width,2):
+            Sxx = np.sum(Ixx[y-1:y+1, x-1:x+1])
+            Syy = np.sum(Iyy[y-1:y+1, x-1:x+1])
+            Sxy = np.sum(Ixy[y-1:y+1, x-1:x+1])
+           
+            #Find determinant and trace, use to get corner response
+           
+            detH = (Sxx * Syy) - (Sxy**2)
+            traceH = Sxx + Syy
+            r = detH - 0.06*(traceH**2)
+            #If corner response is over threshold, it is a corner
+           
+            if r > threshold:
+                xs.append(x)
+                ys.append(y)
+                rs.append(r)
+    # we have a memory limitation where we cannpot store an array with shape == (3500>,128)
+    # hence we check for the best 3500 points and include them in our calculations
+   
+    if (len(rs)>3500): 
+       
+        indices=np.argsort(rs)
+       
+        indices=indices[-3501:-1]
+       
+        xs=np.array(xs)
+       
+        ys=np.array(ys)
+       
+        xs=xs[indices]
+       
+        ys=ys[indices]
+    
+    return np.asarray(xs), np.asarray(ys)
 
 
 def get_features(image, x, y, feature_width):
@@ -151,12 +210,35 @@ def match_features(im1_features, im2_features):
             column is an index into im1_features and the second column is an index into im2_features
     :confidences: an np array with a real valued confidence for each match
     """
+    dist = np.zeros((im1_features.shape[0], im2_features.shape[0]))
+    
+    matches = []
+    
+    confidences = []
+    
+    threshold = 0.8
+    Value = []
+    
+    for i in range(im1_features.shape[0]): 
+        for y in range(im2_features.shape[0]): 
+    
+            x_features = im1_features[i]
+            y_features = im2_features[y]
+            
+            sub = (x_features - y_features) ** 2
+            Sum = sub.sum()
+            Sum = np.sqrt(Sum)
+            dist[i,y] = Sum
+            
+            
+        indexs = np.argsort(dist[i])    
+        ratio = (dist[i,indexs[0]] / dist[i,indexs[1]])  
+                
+        if ratio < threshold:
+            matches.append([i, indexs[0]])
+            Value.append(dist[i,indexs[0]])        
 
-    # TODO: Your implementation here! See block comments and the project webpage for instructions
-
-    # These are placeholders - replace with your matches and confidences!
-
-    matches = np.zeros((1, 2))
-    confidences = np.zeros(1)
-
+    matches = np.asarray(matches)
+    confidences = np.asarray(Value)    
+    
     return matches, confidences
