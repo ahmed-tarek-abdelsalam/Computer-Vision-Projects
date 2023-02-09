@@ -42,7 +42,7 @@ def get_tiny_images(image_paths):
                          skimage.io.imread, np.reshape
     """
 
-    
+
     tiny_images = np.zeros((len(image_paths), 16*16))
 
     for number, data in enumerate(image_paths):
@@ -126,8 +126,24 @@ def build_vocabulary(image_paths, vocab_size):
     """
 
     # TODO: Implement this function!
+    ppc= 4  # pixels per cell
+    cpb = 4 # cells per block
+ 
+    histogram=[]
 
-    return np.array([])
+    for img in image_paths:
+        img=imread(img)
+        histo = hog(img,pixels_per_cell=(ppc,ppc),cells_per_block=(cpb,cpb),feature_vector=True)
+        histo_reshaped= histo.reshape(-1,9*cpb*cpb)
+        histogram.extend(histo_reshaped)
+    
+    
+    histogram=np.array(histogram)
+
+    kmeans= MiniBatchKMeans(n_clusters=vocab_size, n_init=10, max_iter=100, tol=0.0001,
+    random_state=7).fit(histogram)
+        
+    return np.array(kmeans.cluster_centers_)
 
 
 def get_bags_of_words(image_paths):
@@ -164,8 +180,32 @@ def get_bags_of_words(image_paths):
     print('Loaded vocab from file.')
 
     # TODO: Implement this function!
+    final = np.zeros((len(image_paths),200))
+        
+    ppc= 4  # pixels per cell
+    cpb = 4 # cells per block
+ 
+    for i,img in enumerate(image_paths):
+        img=imread(img)
+        histo = hog(img,pixels_per_cell=(ppc,ppc),cells_per_block=(cpb,cpb),feature_vector=True)
+        histo_reshaped= histo.reshape(-1,9*cpb*cpb)
+        distances = cdist(histo_reshaped, vocab, 'euclidean')
+        for x in range(len(histo_reshaped)):
+            Sorted = np.argmin(distances[x,:])
+            final[i][Sorted] += 1
+    return final
 
-    return np.array([])
+def RFR_classify(train_image_feats, train_labels, test_image_feats):
+    RFR = RandomForestClassifier()
+    hp = {'max_depth':np.arange(3,9),'min_samples_split':np.arange(10,100,10) }
+
+    grid = GridSearchCV(RFR, param_grid  = hp  , cv = 5)
+    grid.fit(train_image_feats,train_labels)
+    print("best results",grid.best_score_)
+    print(f"Best result {grid.best_params_}")
+    y_pred = grid.predict(test_image_feats)
+
+    return y_pred
 
 
 def svm_classify(train_image_feats, train_labels, test_image_feats):
@@ -192,7 +232,7 @@ def svm_classify(train_image_feats, train_labels, test_image_feats):
     """
 
     # TODO: Implement this function!
-    
+
     svc=SVC()
     
     hp={ 'C':[0.1,1,10], 'kernel':['rbf','linear'], 'gamma':np.logspace(-3, 2, 6)}
@@ -255,6 +295,4 @@ def nearest_neighbor_classify(train_image_feats, train_labels, test_image_feats)
         nearest_neighbor = mode(neighbours)
         label.append(nearest_neighbor[0][0])
     label = np.asarray(label)
-
-
     return label
