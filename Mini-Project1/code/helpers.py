@@ -4,8 +4,91 @@
 # CS 4495/6476 @ Georgia Tech
 import numpy as np
 from numpy import pi, exp, sqrt
+import copy
 from skimage import io, img_as_ubyte, img_as_float32
 from skimage.transform import rescale
+from scipy.signal import convolve2d, correlate2d
+
+def create_gaussian_filter(side_length, sigma):
+    '''
+    This function is used to create a guassian filter
+    Input: 
+    Sigma, the required size
+    Output :
+    Kernel 
+    '''
+
+    ax = np.linspace(-(side_length - 1) / 2., (side_length- 1) / 2., side_length)
+    xx, yy = np.meshgrid(ax, ax)
+
+    kernel = np.exp(-0.5 * (np.square(xx) + np.square(yy)) / np.square(sigma))
+
+    return kernel / np.sum(kernel)
+
+def _isKernelOdd(filter: np.ndarray):
+    '''
+    This function checks if either of the kernel dimenision is odd
+    Input: 
+    - 2D nparray filter
+    Output: 
+    - Has no output, But raise error if either dimension of the filter
+      is even
+    '''
+    if filter.shape[0]%2==0:
+        raise NameError('Number of rows of the kernel should be odd') 
+    elif filter.shape[1]%2 == 0:
+        raise NameError('Number of columns of the kernel should be odd')
+
+def _2Dconvolution(image:np.ndarray,kernel:np.ndarray) ->np.ndarray:
+    '''
+    This function makes 2D convolution, by flipping the kernel and correlating to the image
+    Input:
+    - Image 2D np.array
+    - Kernel 2D np.array with odd dimensions
+    Output: 
+    - returns convolved version of the image maintaining the orignal size of the image
+    '''
+    
+    # First let's pad the image in order to avoid Cirular convolution
+    # and subconsequently avoid losing info
+    
+    imageLen= image.shape[0]
+    imageWidth= image.shape[1]
+    kernelLen,kernelWidth= kernel.shape
+    
+    
+    paddedImage= np.zeros((imageLen+kernelLen-1,imageWidth+kernelWidth-1))
+    paddedImage[0:imageLen,0:imageWidth]=copy.deepcopy(image)
+    # deep copy is used to avoid any manipulation that could happen in the orignal image
+    
+    # the image that we are going to return after updating its values
+    filteredImage= np.zeros((imageLen+kernelLen-1,imageWidth+kernelWidth-1))
+    
+    for i in  range(paddedImage.shape[0]):
+        for j in range(paddedImage.shape[1]):
+            for k in range(kernel.shape[0]):
+                for l in  range(kernel.shape[1]):
+                    # checking that we have a valid array indexing
+                    if i-k>=0 and  j-k>=0:                        
+                        # making sure that the calculated value doesn'et exceeds the pixels range
+                        value=np.clip(filteredImage[i,j]+ kernel[k,l]*paddedImage[i-k,j-k],0,255)
+                        filteredImage[i,j]= value
+    # now we want to take restore the image's orignial shape
+    # Our kernel's anchor is the left-up cornered square Hence our 
+    # convolved image is at the enter. As a result we want to take this part without all the borderds
+    # and since our kernel is odd then we an use the bellow equation
+    return filteredImage[kernelLen//2:imageLen+kernelLen//2,kernelWidth//2:imageWidth+kernelWidth//2]
+
+def _2Dcorrelation(paddedImage,kernel) -> np.ndarray:
+    '''
+    This Funtion correlates 2D matrices with each other by passing the inverted kernel to 2D convolution function. 
+    Input:
+    - Image 2D np.array
+    - Kernel 2D np.array with odd dimensions
+    Output: 
+    - returns Image after correlating it with the kernel,It also maintains the orignal size of the image.
+    '''
+    return _2Dconvolution(paddedImage,np.flip(kernel))
 
 def my_imfilter(image: np.ndarray, filter: np.ndarray):
   """
@@ -23,7 +106,23 @@ def my_imfilter(image: np.ndarray, filter: np.ndarray):
 
   ##################
   # Your code here #
-  raise NotImplementedError('my_imfilter function in helpers.py needs to be implemented')
+  
+  # First let's check that the kernel is not odd dim 
+  # if any dim is even an error message would occur
+  _isKernelOdd(filter)
+    
+  # second let's check if we have a gray or multi-channel Image
+  if image.ndim==2: 
+    # means it is a gray image
+    filtered_image= _2Dcorrelation(image,filter)
+  else: 
+    # means it is a multi channel image 
+    filtered_image= np.zeros(image.shape)
+    for c in range(image.shape[2]):
+      filtered_image[:,:,c]= _2Dcorrelation(image[:,:,c],filter)                    
+
+
+  return filtered_image
   ##################
 
   return filtered_image
