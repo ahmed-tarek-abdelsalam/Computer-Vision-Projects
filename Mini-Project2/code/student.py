@@ -110,6 +110,109 @@ def get_interest_points(image, feature_width):
     return np.asarray(xs), np.asarray(ys)
 
 
+
+def _image_gradient(image):
+    '''
+    This function calculates the magnitude and direction of pixel gradient
+    Output: 
+    gradient magnitude 
+    gradient directions
+    ''' 
+    # # equation presented in David J lowe's paper
+    # # page 13 under the section of orientation assignment
+    # kx= [[0,0,0],[-1,0,1],[0,0,0]]
+    # ky= [[0,1,0],[0,0,0],[0,-1,0]]
+    # change_in_x= correlate2d(image,kx,'same')
+    # change_in_y= correlate2d(image,ky,'same')
+    # magnitude = np.sqrt(np.square(change_in_x) + np.square(change_in_y))
+    # directions = np.arctan2(change_in_y,change_in_x)
+
+    # we have used the sobel in our calculations instead of the equation 
+    # proposed in david j lowe'spaper as sobel gave us better results. We do think 
+    # that sobel has gave us better results bec it was much omre immune to 
+    # the very small changes.
+    img_sobelx = cv2.Sobel(image, cv2.CV_32F, 1, 0, ksize=3)
+    img_sobely = cv2.Sobel(image, cv2.CV_32F, 0, 1, ksize=3)
+
+    magnitude = np.sqrt(np.square(img_sobelx) + np.square(img_sobely))
+    directions = np.arctan2(img_sobely,img_sobelx)
+    
+    return magnitude,directions
+
+def _get_patch(img,featureLoc,window):
+    '''
+    This Function should return the patch around the feature 
+    Assumption:
+    1. img is 2D -One channel-    
+    Output:
+    16*16 np array
+    '''
+   
+    assert len(img.shape) == 2 
+    
+    featureLoc=[round(num) for num in featureLoc]    
+    
+    startXpos = featureLoc[1] - window + 1 # +1 because the pos at x,y is included
+    endXpos= featureLoc[1] + window +1  # +1 bec in slicing the arrays are inclusive exclusive
+    
+    startYpos=  featureLoc[0] - window + 1
+    endYpos= featureLoc[0] + window +1
+
+    if startXpos < 0:
+        endXpos= endXpos- startXpos
+        startXpos = 0 
+    
+    if startYpos < 0:
+        endYpos= endYpos - startYpos
+        startYpos= 0
+    if endXpos > img.shape[0]:
+        startXpos = startXpos  + img.shape[0] - endXpos 
+        endXpos= img.shape[0] 
+
+    if endYpos > img.shape[1]:
+        startYpos = startYpos  + img.shape[1] - endYpos 
+        endYpos= img.shape[1] 
+    
+    return img[startXpos : endXpos, startYpos:endYpos]
+ 
+def _create_cells(mag:List[np.ndarray],dir:List[np.ndarray],cellWindow=4):
+    '''
+    This function divide the patch into list of cells
+    Output 
+    1. list of cells magntiude
+    2. list of cells direction
+    '''
+
+    assert mag.shape == dir.shape
+
+    # We will treat them at first as list bec its append has lower complexity
+    cells_mag=list()
+    cells_dir=list()
+    for i in range(0,mag.shape[0],cellWindow):
+        for j in range(0,mag.shape[1],cellWindow):
+            cells_mag.append(mag[i:i+cellWindow,j:j+cellWindow])
+            cells_dir.append(dir[i:i+cellWindow,j:j+cellWindow])
+    return np.array(cells_mag),np.array(cells_dir)
+
+
+
+def _make_histogram(cell_magnitude,cell_dir):
+    '''
+    This function retuns the histogram of each cell 
+    the histogram has 8 elements each represents the mag in a given direction
+    Output
+    list
+    '''
+    assert cell_magnitude.shape==cell_dir.shape
+    
+    histo= np.zeros(8)
+    cell_magnitude=cell_magnitude.reshape(-1)
+    cell_dir=cell_dir.reshape(-1)
+
+    histo = np.histogram(cell_dir, bins=8,
+            range=(-np.pi, np.pi), weights=cell_magnitude)[0]
+
+    return histo.tolist()
 def get_features(image, x, y, feature_width):
     """
     Returns feature descriptors for a given set of interest points.
@@ -176,7 +279,44 @@ def get_features(image, x, y, feature_width):
 
     # This is a placeholder - replace this with your features!
     features = np.zeros((1, 128))
+    features = list()
+    bluredimage = cv2.GaussianBlur(image,ksize=(3,3),sigmaX=8,sigmaY=8,
+    borderType=cv2.BORDER_CONSTANT)        
+    
+    gradMag,gradDir= _image_gradient(bluredimage)
 
+    for featureLoc in zip(x,y):
+        
+        featureVector=list()
+        
+        mag= _get_patch(gradMag,featureLoc,feature_width//2)
+        dir= _get_patch(gradDir,featureLoc,feature_width//2)
+        # create 4*4 cells lists
+        cellsMg,cellsDir=_create_cells(mag,dir,feature_width//4)
+        # now create histogram for each cell
+        for cell in zip(cellsMg,cellsDir):
+           featureVector.extend(_make_histogram(cell[0],cell[1]))
+        
+       
+        # extend was used bec, i need to make the histo grams in the same 
+        # list not to be a list of lists
+        features.append(featureVector)
+
+    features=np.array(features)
+    
+    # now we will normalize to reduce the effect of illumionization 
+    # normalize the feature vector 
+    scaler= features.max()
+    features= features/scaler
+    
+    # putting thresshold then normalize again
+    features[features>0.2]=0.2
+    
+    scaler= features.max()
+    features= features/scaler
+    # using the recommended trick that was recommended  
+    features= features**0.8
+    print(features.shape)
     return features
 
 
