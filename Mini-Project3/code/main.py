@@ -4,7 +4,7 @@ import os
 import argparse
 
 from helpers import get_image_paths
-from student import get_tiny_images, build_vocabulary, get_bags_of_words, svm_classify, nearest_neighbor_classify
+from student import get_tiny_images, build_vocabulary, get_bags_of_words, svm_classify, nearest_neighbor_classify,get_spatial_pyramid
 from create_results_webpage import create_results_webpage
 
 
@@ -116,19 +116,19 @@ def projSceneRecBoW(feature='placeholder', classifier='placeholder'):
             print('No existing visual word vocabulary found. Computing one from training images.')
 
             # Larger values will work better (to a point), but are slower to compute
-            vocab_size = 200
+            vocab_size = 80
 
             # YOU CODE build_vocabulary (see student.py)
             vocab = build_vocabulary(train_image_paths, vocab_size)
             np.save('vocab.npy', vocab)
 
         # YOU CODE get_bags_of_words.m (see student.py)
-        train_image_feats = get_bags_of_words(train_image_paths)
+        train_image_feats = get_spatial_pyramid(train_image_paths)
         # You may want to write out train_image_features here as a *.npy and
         # load it up later if you want to just test your classifiers without
         # re-computing features
 
-        test_image_feats = get_bags_of_words(test_image_paths)
+        test_image_feats = get_spatial_pyramid(test_image_paths)
         # Same goes here for test image features.
 
     elif FEATURE.lower() == 'placeholder':
