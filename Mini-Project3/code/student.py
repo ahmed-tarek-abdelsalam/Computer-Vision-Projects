@@ -1,11 +1,15 @@
 import numpy as np
-import matplotlib
 from skimage.io import imread
-from skimage.color import rgb2grey
 from skimage.feature import hog
 from skimage.transform import resize
 from scipy.spatial.distance import cdist
-
+import cv2
+from sklearn.svm import SVC
+from scipy.stats import mode
+from sklearn.cluster import KMeans
+from sklearn.cluster import MiniBatchKMeans 
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
 
 def get_tiny_images(image_paths):
     """
@@ -38,9 +42,17 @@ def get_tiny_images(image_paths):
                          skimage.io.imread, np.reshape
     """
 
-    # TODO: Implement this function!
+    
+    tiny_images = np.zeros((len(image_paths), 16*16))
 
-    return np.array([])
+    for number, data in enumerate(image_paths):
+        image = imread(data)
+        image_resized = cv2.resize(image, (16,16), interpolation = cv2.INTER_AREA)
+        image_normalized = (image_resized - np.mean(image_resized))/ np.std(image_resized)
+        tiny_images[number,:] = image_normalized.flatten()
+
+
+    return tiny_images
 
 
 def build_vocabulary(image_paths, vocab_size):
@@ -180,8 +192,17 @@ def svm_classify(train_image_feats, train_labels, test_image_feats):
     """
 
     # TODO: Implement this function!
+    
+    svc=SVC()
+    
+    hp={ 'C':[0.1,1,10], 'kernel':['rbf','linear'], 'gamma':np.logspace(-3, 2, 6)}
 
-    return np.array([])
+    grid = GridSearchCV(svc, param_grid  = hp  , cv = 10)
+    grid.fit(train_image_feats,train_labels)
+
+    y_pred = grid.predict(test_image_feats)
+
+    return y_pred
 
 
 def nearest_neighbor_classify(train_image_feats, train_labels, test_image_feats):
@@ -223,16 +244,17 @@ def nearest_neighbor_classify(train_image_feats, train_labels, test_image_feats)
         scipy.spatial.distance.cdist, np.argsort, scipy.stats.mode
     """
 
-    k = 1
+    k = 14
 
-    # Gets the distance between each test image feature and each train image feature
-    # e.g., cdist
     distances = cdist(test_image_feats, train_image_feats, 'euclidean')
+    label = []
 
-    # TODO:
-    # 1) Find the k closest features to each test image feature in euclidean space
-    # 2) Determine the labels of those k features
-    # 3) Pick the most common label from the k
-    # 4) Store that label in a list
+    for x in range(len(test_image_feats)):
+        Sorted = np.argsort(distances[x, :])
+        neighbours = [train_labels[Sorted[y]] for y in range(k)]
+        nearest_neighbor = mode(neighbours)
+        label.append(nearest_neighbor[0][0])
+    label = np.asarray(label)
 
-    return np.array([])
+
+    return label
